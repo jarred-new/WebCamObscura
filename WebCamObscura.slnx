@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="WebCamObscura/WebCamObscura.vcxproj" Id="9db0b915-0e40-4efb-8391-0e509e79b0a6" />
+</Solution>
