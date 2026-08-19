@@ -208,12 +208,12 @@ int WINAPI WinMain(
         // ====================================================
 
         ImGui::SetNextWindowPos(
-            ImVec2(20, 20),
+            ImVec2(60, 60),
             ImGuiCond_FirstUseEver
         );
 
         ImGui::SetNextWindowSize(
-            ImVec2(800, 550),
+            ImVec2(400, 400),
             ImGuiCond_FirstUseEver
         );
 
@@ -248,6 +248,13 @@ int WINAPI WinMain(
                     nullptr,
                     &g_darkMode
                 );
+
+				//if (ImGui::MenuItem("Change Background Color", nullptr, &g_enabled))
+				//{
+				//	ImGui::OpenPopup("Background Color");
+				//	ImGui::ColorPicker3("Background Color", (float*)&g_enabled);
+    //                ImGui::EndPopup();
+				//}
 
                 ImGui::EndMenu();
             }
@@ -655,43 +662,43 @@ LRESULT WINAPI WndProc(
 
     switch (msg)
     {
-    case WM_SIZE:
-    {
-        if (g_pd3dDevice != nullptr &&
-            wParam != SIZE_MINIMIZED)
+        case WM_SIZE:
         {
-            CleanupRenderTarget();
+            if (g_pd3dDevice != nullptr &&
+                wParam != SIZE_MINIMIZED)
+            {
+                CleanupRenderTarget();
 
-            g_pSwapChain->ResizeBuffers(
-                0,
-                static_cast<UINT>(LOWORD(lParam)),
-                static_cast<UINT>(HIWORD(lParam)),
-                DXGI_FORMAT_UNKNOWN,
-                0
-            );
+                g_pSwapChain->ResizeBuffers(
+                    0,
+                    static_cast<UINT>(LOWORD(lParam)),
+                    static_cast<UINT>(HIWORD(lParam)),
+                    DXGI_FORMAT_UNKNOWN,
+                    0
+                );
 
-            CreateRenderTarget();
+                CreateRenderTarget();
+            }
+
+            return 0;
         }
 
-        return 0;
-    }
+        case WM_SYSCOMMAND:
+        {
+            if ((wParam & 0xfff0) == SC_KEYMENU)
+                return 0;
 
-    case WM_SYSCOMMAND:
-    {
-        if ((wParam & 0xfff0) == SC_KEYMENU)
+            break;
+        }
+
+        case WM_DESTROY:
+        {
+            g_running = false;
+
+            ::PostQuitMessage(0);
+
             return 0;
-
-        break;
-    }
-
-    case WM_DESTROY:
-    {
-        g_running = false;
-
-        ::PostQuitMessage(0);
-
-        return 0;
-    }
+        }
     }
 
     return ::DefWindowProcW(
