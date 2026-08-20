@@ -62,6 +62,7 @@ static bool g_running = true;
 static bool g_darkMode = true;
 
 static int g_selectedCameraIndex = 0;
+static bool g_openmodal = false;
 static float g_bgColor[4] = { 0.08f, 0.08f, 0.08f, 1.0f };
 
 static int g_width = 640;
@@ -240,7 +241,7 @@ int WINAPI WinMain(
         //ImVec4 bgCol = ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]);
         //ImGuiStyleColorGuard guard(ImGuiCol_WindowBg, bgCol);
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]));
+        //ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]));
 
         ImGui::Begin(
             "Start WebCamObscura",
@@ -267,7 +268,7 @@ int WINAPI WinMain(
             {
                 ImGui::MenuItem("Dark Mode", nullptr, &g_darkMode);
                 if (ImGui::MenuItem("Change BG Color"))
-                    ImGui::OpenPopup("CGB");
+					g_openmodal = true;
                 ImGui::EndMenu();
             }
 
@@ -290,23 +291,7 @@ int WINAPI WinMain(
 
             ImGui::EndMenuBar();
         }
-
-        // ----------------------------------------------------
-        // Popup Dialog (Placed properly within the window context)
-        // ----------------------------------------------------
-
-        ImGui::SetNextWindowSize(ImVec2(300, 430), ImGuiCond_FirstUseEver);
-        if (ImGui::BeginPopup("CGB"))
-        {
-            ImGui::Text("Select Background Color");
-            ImGui::Separator();
-            ImGui::ColorPicker4("##picker", g_bgColor, ImGuiColorEditFlags_AlphaBar);
-            ImGui::Spacing();
-            if (ImGui::Button("Close", ImVec2(120, 0)))
-                ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-        }
-
+        
         // ----------------------------------------------------
         // Change style
         // ----------------------------------------------------
@@ -464,7 +449,25 @@ int WINAPI WinMain(
 
         ImGui::End();
 
-		ImGui::PopStyleColor();
+		if (g_openmodal)
+		{
+			ImGui::OpenPopup("Change BG Color");
+			g_openmodal = false;
+		}
+
+        ImGui::SetNextWindowSize(ImVec2(300, 430), ImGuiCond_FirstUseEver);
+        if (ImGui::BeginPopupModal("Change BG Color", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Select Background Color");
+            ImGui::Separator();
+            ImGui::ColorPicker4("##picker", g_bgColor, ImGuiColorEditFlags_AlphaBar);
+            ImGui::Spacing();
+            if (ImGui::Button("Close", ImVec2(120, 0)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+		//ImGui::PopStyleColor();
 
         // ====================================================
         // Rendering
@@ -472,13 +475,13 @@ int WINAPI WinMain(
 
         ImGui::Render();
 
-        const float clearColor[4] =
-        {
-            0.08f,
-            0.08f,
-            0.08f,
-            1.0f
-        };
+        //const float clearColor[4] =
+        //{
+        //    0.08f,
+        //    0.08f,
+        //    0.08f,
+        //    1.0f
+        //};
 
         g_pd3dDeviceContext->OMSetRenderTargets(
             1,
@@ -486,15 +489,15 @@ int WINAPI WinMain(
             nullptr
         );
 
-        g_pd3dDeviceContext->ClearRenderTargetView(
-            g_mainRenderTargetView,
-            clearColor
-        );
-
         //g_pd3dDeviceContext->ClearRenderTargetView(
         //    g_mainRenderTargetView,
-        //    colorBg
+        //    clearColor
         //);
+
+        g_pd3dDeviceContext->ClearRenderTargetView(
+            g_mainRenderTargetView,
+            g_bgColor
+        );
 
         ImGui_ImplDX11_RenderDrawData(
             ImGui::GetDrawData()
