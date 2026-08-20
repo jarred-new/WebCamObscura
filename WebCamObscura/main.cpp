@@ -372,7 +372,7 @@ int WINAPI WinMain(
 			{
 				MessageBoxA(
 					hwnd,
-					"The selected camera index does not exist."
+					"The selected camera index does not exist.\n"
                     "Please select a valid camera index or insert/reinsert the video capture device.",
 					"Error",
 					MB_OK | MB_ICONERROR
