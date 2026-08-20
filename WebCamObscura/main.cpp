@@ -259,7 +259,10 @@ int WINAPI WinMain(
             {
                 if (ImGui::MenuItem("Exit"))
                 {
-                    g_running = false;
+                    if (MessageBoxA(hwnd, "Are you sure you want to close the application?", "Confirm Close", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+                        g_running = false;
+                        ::DestroyWindow(hwnd);
+                    }
                 }
                 ImGui::EndMenu();
             }
