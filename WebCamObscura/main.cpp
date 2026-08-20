@@ -740,6 +740,15 @@ LRESULT WINAPI WndProc(
             break;
         }
 
+		case WM_CLOSE:
+		{
+            if (MessageBoxA(hWnd, "Are you sure you want to close the application?", "Confirm Close", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+				g_running = false;
+				::DestroyWindow(hWnd);
+            }
+			return 0;
+		}
+
         case WM_DESTROY:
         {
             g_running = false;
