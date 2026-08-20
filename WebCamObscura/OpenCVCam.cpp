@@ -83,3 +83,10 @@ void OpenCVCam::setCameraId(int id) {
         stop();
     camId = id;
 }
+
+bool OpenCVCam::isCameraIdExist(int id) {
+	cv::VideoCapture testCap;
+	bool exists = testCap.open(id);
+	if (exists) testCap.release();
+	return exists;
+}

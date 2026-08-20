@@ -21,6 +21,8 @@ public:
     void setResolution(int w, int h);
     void setCameraId(int id);
 
+    bool isCameraIdExist(int id);
+
 private:
     int camId;
     int width = 640;

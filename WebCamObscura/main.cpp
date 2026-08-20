@@ -368,6 +368,18 @@ int WINAPI WinMain(
             ImVec2(150, 40)
         ))
         {
+			if (cam.isCameraIdExist(g_selectedCameraIndex) == false)
+			{
+				MessageBoxA(
+					hwnd,
+					"The selected camera index does not exist."
+                    "Please select a valid camera index or insert/reinsert the video capture device.",
+					"Error",
+					MB_OK | MB_ICONERROR
+				);
+				continue;
+			}
+
             try {
                 cam.setCameraId(g_selectedCameraIndex);
                 cam.setResolution(g_width, g_height);
