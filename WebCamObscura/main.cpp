@@ -9,6 +9,26 @@
 
 #pragma comment(lib, "d3d11.lib")
 
+// RAII guard to ensure every PushStyleColor is popped even on early exits
+struct ImGuiStyleColorGuard
+{
+    ImGuiStyleColorGuard(ImGuiCol idx, const ImVec4& col)
+    {
+        ImGui::PushStyleColor(idx, col);
+        pushed = 1;
+    }
+    ~ImGuiStyleColorGuard()
+    {
+        if (pushed)
+            ImGui::PopStyleColor();
+    }
+    // disable copy
+    ImGuiStyleColorGuard(const ImGuiStyleColorGuard&) = delete;
+    ImGuiStyleColorGuard& operator=(const ImGuiStyleColorGuard&) = delete;
+private:
+    int pushed = 0;
+};
+
 // ------------------------------------------------------------
 // DirectX 11 globals
 // ------------------------------------------------------------
@@ -39,10 +59,10 @@ LRESULT WINAPI WndProc(
 // ------------------------------------------------------------
 
 static bool g_running = true;
-static bool g_enabled = true;
 static bool g_darkMode = true;
 
 static int g_selectedCameraIndex = 0;
+static float g_bgColor[4] = { 0.08f, 0.08f, 0.08f, 1.0f };
 
 static int g_width = 640;
 static int g_height = 480;
@@ -217,6 +237,11 @@ int WINAPI WinMain(
             ImGuiCond_FirstUseEver
         );
 
+        //ImVec4 bgCol = ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]);
+        //ImGuiStyleColorGuard guard(ImGuiCol_WindowBg, bgCol);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]));
+
         ImGui::Begin(
             "Start WebCamObscura",
             nullptr,
@@ -231,31 +256,18 @@ int WINAPI WinMain(
         {
             if (ImGui::BeginMenu("File"))
             {
-                //if (ImGui::MenuItem("New"))
-                //...
                 if (ImGui::MenuItem("Exit"))
                 {
                     g_running = false;
                 }
-
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("View"))
             {
-                ImGui::MenuItem(
-                    "Dark Mode",
-                    nullptr,
-                    &g_darkMode
-                );
-
-				//if (ImGui::MenuItem("Change Background Color", nullptr, &g_enabled))
-				//{
-				//	ImGui::OpenPopup("Background Color");
-				//	ImGui::ColorPicker3("Background Color", (float*)&g_enabled);
-    //                ImGui::EndPopup();
-				//}
-
+                ImGui::MenuItem("Dark Mode", nullptr, &g_darkMode);
+                if (ImGui::MenuItem("Change BG Color"))
+                    ImGui::OpenPopup("CGB");
                 ImGui::EndMenu();
             }
 
@@ -273,11 +285,26 @@ int WINAPI WinMain(
                         MB_OK | MB_ICONINFORMATION
                     );
                 }
-
                 ImGui::EndMenu();
             }
 
             ImGui::EndMenuBar();
+        }
+
+        // ----------------------------------------------------
+        // Popup Dialog (Placed properly within the window context)
+        // ----------------------------------------------------
+
+        ImGui::SetNextWindowSize(ImVec2(300, 430), ImGuiCond_FirstUseEver);
+        if (ImGui::BeginPopup("CGB"))
+        {
+            ImGui::Text("Select Background Color");
+            ImGui::Separator();
+            ImGui::ColorPicker4("##picker", g_bgColor, ImGuiColorEditFlags_AlphaBar);
+            ImGui::Spacing();
+            if (ImGui::Button("Close", ImVec2(120, 0)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
         // ----------------------------------------------------
@@ -437,6 +464,8 @@ int WINAPI WinMain(
 
         ImGui::End();
 
+		ImGui::PopStyleColor();
+
         // ====================================================
         // Rendering
         // ====================================================
@@ -461,6 +490,11 @@ int WINAPI WinMain(
             g_mainRenderTargetView,
             clearColor
         );
+
+        //g_pd3dDeviceContext->ClearRenderTargetView(
+        //    g_mainRenderTargetView,
+        //    colorBg
+        //);
 
         ImGui_ImplDX11_RenderDrawData(
             ImGui::GetDrawData()
