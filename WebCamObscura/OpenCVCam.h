@@ -23,12 +23,21 @@ public:
 
     bool isCameraIdExist(int id);
 
+	void startRecording(const std::string& filename);
+	void stopRecording();
+	std::string getVideoStatus() const;
+
 private:
     int camId;
     int width = 640;
     int height = 480;
     cv::VideoCapture cap;
     bool opened;
+
+    double fps;
+
+    std::string videoStatus; // for video rocording status
+	bool isRecording = false;
 
     // worker + synchronization for showing/grabbing frames
     std::atomic<bool> running;

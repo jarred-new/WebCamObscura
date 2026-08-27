@@ -65,6 +65,9 @@ static int g_selectedCameraIndex = 0;
 static bool g_openmodal = false;
 static float g_bgColor[4] = { 0.08f, 0.08f, 0.08f, 1.0f };
 
+static bool g_recorderWindowOpen = false;
+static std::string g_videoFileName = "output.avi";
+
 static int g_width = 640;
 static int g_height = 480;
 
@@ -269,6 +272,8 @@ int WINAPI WinMain(
 
             if (ImGui::BeginMenu("View"))
             {
+				ImGui::MenuItem("Video Recorder", nullptr, &g_recorderWindowOpen);
+                ImGui::Separator();
                 ImGui::MenuItem("Dark Mode", nullptr, &g_darkMode);
                 if (ImGui::MenuItem("Change BG Color"))
 					g_openmodal = true;
@@ -463,6 +468,72 @@ int WINAPI WinMain(
         );
 
         ImGui::End();
+
+        // ====================================================
+        // Record window
+        // ====================================================
+
+        if (g_recorderWindowOpen)
+        {
+            ImGui::Begin("Video Recorder", &g_recorderWindowOpen);
+            
+            ImGui::Text("Video File Name:");
+			ImGui::Indent();
+			ImGui::InputText("File Name", (char *)g_videoFileName.c_str(), g_videoFileName.length() + 1);
+			ImGui::SameLine();
+			if (ImGui::Button("Browse"))
+			{
+				OPENFILENAMEA ofn;
+				CHAR szFile[260] = { 0 };
+				ZeroMemory(&ofn, sizeof(ofn));
+				ofn.lStructSize = sizeof(ofn);
+				ofn.hwndOwner = hwnd;
+				ofn.lpstrFile = szFile;
+				ofn.nMaxFile = sizeof(szFile);
+				ofn.lpstrFilter = "AVI Files\0*.avi\0All Files\0*.*\0";
+				ofn.nFilterIndex = 1;
+				ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+				if (GetSaveFileNameA(&ofn) == TRUE)
+				{
+					g_videoFileName = std::string(szFile);
+				}
+			}
+            ImGui::Unindent();
+
+			ImGui::Spacing();
+
+			if (ImGui::Button("Start Recording"))
+			{
+				try {
+					cam.startRecording(g_videoFileName);
+				}
+				catch (const std::exception& e) {
+					MessageBoxA(
+						hwnd,
+						e.what(),
+						"Error",
+						MB_OK | MB_ICONERROR
+					);
+				}
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Stop Recording"))
+			{
+				cam.stopRecording();
+			}
+
+            ImGui::Spacing();
+
+			ImGui::Separator();
+
+            ImGui::Text("Recording Status: %s", cam.getVideoStatus().c_str());
+
+            ImGui::End();
+        }
+
+        // ====================================================
+        // Change BG Color window
+        // ====================================================
 
 		if (g_openmodal)
 		{

@@ -12,6 +12,12 @@ bool OpenCVCam::start() {
     cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
 
+    // get fps from the camera
+	fps = cap.get(cv::CAP_PROP_FPS);
+    if (fps <= 0) {
+		fps = 30.0; // default to 30 fps if camera doesn't provide it
+    }
+
     opened = true;
     running = true;
 
@@ -89,4 +95,75 @@ bool OpenCVCam::isCameraIdExist(int id) {
 	bool exists = testCap.open(id);
 	if (exists) testCap.release();
 	return exists;
+}
+
+void OpenCVCam::startRecording(const std::string& filename)
+{
+	isRecording = true;
+    if (!opened) {
+        videoStatus = "Camera is not opened. Cannot start recording.";
+        isRecording = false;
+        return;
+    }
+
+    int fourcc = 0;
+    
+	// get the fourcc code from the filename extension if not provided
+	if (fourcc == 0) {
+		std::string ext = filename.substr(filename.find_last_of(".") + 1);
+		if (ext == "avi") fourcc = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+		else if (ext == "mp4") fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
+		else if (ext == "mov") fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
+		else {
+			videoStatus = "Unsupported video format for recording.";
+            isRecording = false;
+            return;
+		}
+	}
+
+	cv::VideoWriter writer(
+        filename, 
+        fourcc, 
+        fps, 
+        cv::Size(this->width, this->height), 
+        true
+    );
+
+	if (!writer.isOpened()) {
+		videoStatus = "Failed to open video writer for recording.";
+        isRecording = false;
+        return;
+	}
+
+    while (running && isRecording) {
+        cv::Mat frame;
+        cap >> frame;
+        if (!grabFrame(frame)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            continue;
+        }
+        writer.write(frame);
+        videoStatus = "Recording to " + filename + " at " + std::to_string(fps) + " FPS.";
+    }
+
+	// Release the writer when done
+	if (writer.isOpened() && (isRecording == false)) {
+        writer.release();
+        videoStatus = "Recording stopped.";
+	}
+}
+
+void OpenCVCam::stopRecording()
+{
+	//running = false;
+	isRecording = false;
+	//videoStatus = "Recording stopped.";
+}
+
+std::string OpenCVCam::getVideoStatus() const
+{
+	if (videoStatus.empty()) {
+		return "No recording in progress.";
+	}
+    return videoStatus;
 }
