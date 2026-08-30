@@ -10,15 +10,19 @@ FFmpegMergeClass::~FFmpegMergeClass()
 {
 }
 
-bool FFmpegMergeClass::MergeAudioVideo(const std::string& videoFile, const std::string& audioFile, const std::string& outputFile)
+bool FFmpegMergeClass::MergeAudioVideo(
+    const std::string& videoFile, 
+    const std::string& audioFile, 
+    const std::string& outputFile,
+    const bool showFFmpegConsole)
 {
     const std::wstring ffmpegPath = GetFFmpegPath();
     const std::wstring videoPath(videoFile.begin(), videoFile.end());
     const std::wstring audioPath(audioFile.begin(), audioFile.end());
     const std::wstring outputPath(outputFile.begin(), outputFile.end());
     const std::wstring command =
-        L"\"" + ffmpegPath + L"\" -y -i \"" + videoPath +
-        L"\" -i \"" + audioPath + L"\" -c copy \"" + outputPath + L"\"";
+        L"\"" + ffmpegPath + L"\" -i \"" + videoPath +
+        L"\" -i \"" + audioPath + L"\" -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 192k -map 0:v:0 -map 1:a:0 \"" + outputPath + L"\"";
 
     std::vector<wchar_t> commandLine(command.begin(), command.end());
     commandLine.push_back(L'\0');
