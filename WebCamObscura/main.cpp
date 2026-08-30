@@ -6,28 +6,42 @@
 #include "imgui_impl_dx11.h"
 
 #include "OpenCVCam.h"
+#include "AudioRecorder.h"
+#include "FFmpegMergeClass.h"
 
 #pragma comment(lib, "d3d11.lib")
 
 // RAII guard to ensure every PushStyleColor is popped even on early exits
-struct ImGuiStyleColorGuard
-{
-    ImGuiStyleColorGuard(ImGuiCol idx, const ImVec4& col)
-    {
-        ImGui::PushStyleColor(idx, col);
-        pushed = 1;
-    }
-    ~ImGuiStyleColorGuard()
-    {
-        if (pushed)
-            ImGui::PopStyleColor();
-    }
-    // disable copy
-    ImGuiStyleColorGuard(const ImGuiStyleColorGuard&) = delete;
-    ImGuiStyleColorGuard& operator=(const ImGuiStyleColorGuard&) = delete;
-private:
-    int pushed = 0;
-};
+//struct ImGuiStyleColorGuard
+//{
+//    ImGuiStyleColorGuard(ImGuiCol idx, const ImVec4& col)
+//    {
+//        ImGui::PushStyleColor(idx, col);
+//        pushed = 1;
+//    }
+//    ~ImGuiStyleColorGuard()
+//    {
+//        if (pushed)
+//            ImGui::PopStyleColor();
+//    }
+//    // disable copy
+//    ImGuiStyleColorGuard(const ImGuiStyleColorGuard&) = delete;
+//    ImGuiStyleColorGuard& operator=(const ImGuiStyleColorGuard&) = delete;
+//private:
+//    int pushed = 0;
+//};
+
+static std::string GetDirectoryFromFilePathManual(const std::string& filePath) {
+	// Find the last occurrence of either a Windows separator or Unix separator
+	size_t lastSlash = filePath.find_last_of("\\/");
+
+	if (lastSlash != std::string::npos) {
+		// Return everything up to, but not including, the last slash
+		return filePath.substr(0, lastSlash);
+	}
+
+	return ""; // No directory found (e.g., if it's just a raw filename like "config.ini")
+}
 
 // ------------------------------------------------------------
 // DirectX 11 globals
@@ -48,10 +62,10 @@ void CreateRenderTarget();
 void CleanupRenderTarget();
 
 LRESULT WINAPI WndProc(
-    HWND hWnd,
-    UINT msg,
-    WPARAM wParam,
-    LPARAM lParam
+	HWND hWnd,
+	UINT msg,
+	WPARAM wParam,
+	LPARAM lParam
 );
 
 // ------------------------------------------------------------
@@ -67,6 +81,7 @@ static float g_bgColor[4] = { 0.08f, 0.08f, 0.08f, 1.0f };
 
 static bool g_recorderWindowOpen = false;
 static std::string g_videoFileName = "output.avi";
+static char g_videoFileNameBuffer[MAX_PATH] = "output.avi";
 
 static int g_width = 640;
 static int g_height = 480;
@@ -76,410 +91,416 @@ static int g_height = 480;
 // ------------------------------------------------------------
 
 int WINAPI WinMain(
-    HINSTANCE hInstance,
-    HINSTANCE,
-    LPSTR,
-    int nCmdShow
+	HINSTANCE hInstance,
+	HINSTANCE,
+	LPSTR,
+	int nCmdShow
 )
 {
-    // --------------------------------------------------------
-    // Register window class
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Register window class
+	// --------------------------------------------------------
 
-    WNDCLASSEXW wc =
-    {
-        sizeof(WNDCLASSEXW),
-        CS_CLASSDC,
-        WndProc,
-        0L,
-        0L,
-        hInstance,
-        nullptr,
-        nullptr,
-        nullptr,
-        nullptr,
-        L"WebCamObscura",
-        nullptr
-    };
+	WNDCLASSEXW wc =
+	{
+		sizeof(WNDCLASSEXW),
+		CS_CLASSDC,
+		WndProc,
+		0L,
+		0L,
+		hInstance,
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr,
+		L"WebCamObscura",
+		nullptr
+	};
 
-    ::RegisterClassExW(&wc);
+	::RegisterClassExW(&wc);
 
-    // --------------------------------------------------------
-    // Create window
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Create window
+	// --------------------------------------------------------
 
-    HWND hwnd = ::CreateWindowW(
-        wc.lpszClassName,
-        L"WebCamObscura",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT,
-        CW_USEDEFAULT,
-        1100,
-        700,
-        nullptr,
-        nullptr,
-        wc.hInstance,
-        nullptr
-    );
+	HWND hwnd = ::CreateWindowW(
+		wc.lpszClassName,
+		L"WebCamObscura",
+		WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		1100,
+		700,
+		nullptr,
+		nullptr,
+		wc.hInstance,
+		nullptr
+	);
 
-    if (!hwnd)
-    {
-        ::UnregisterClassW(
-            wc.lpszClassName,
-            wc.hInstance
-        );
+	if (!hwnd)
+	{
+		::UnregisterClassW(
+			wc.lpszClassName,
+			wc.hInstance
+		);
 
-        return 1;
-    }
+		return 1;
+	}
 
-    // --------------------------------------------------------
-    // Initialize DirectX 11
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Initialize DirectX 11
+	// --------------------------------------------------------
 
-    if (!CreateDeviceD3D(hwnd))
-    {
-        CleanupDeviceD3D();
+	if (!CreateDeviceD3D(hwnd))
+	{
+		CleanupDeviceD3D();
 
-        ::DestroyWindow(hwnd);
+		::DestroyWindow(hwnd);
 
-        ::UnregisterClassW(
-            wc.lpszClassName,
-            wc.hInstance
-        );
+		::UnregisterClassW(
+			wc.lpszClassName,
+			wc.hInstance
+		);
 
-        return 1;
-    }
+		return 1;
+	}
 
-    ::ShowWindow(hwnd, nCmdShow);
-    ::UpdateWindow(hwnd);
+	::ShowWindow(hwnd, nCmdShow);
+	::UpdateWindow(hwnd);
 
-    // --------------------------------------------------------
-    // Initialize Dear ImGui
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Initialize Dear ImGui
+	// --------------------------------------------------------
 
-    IMGUI_CHECKVERSION();
+	IMGUI_CHECKVERSION();
 
-    ImGui::CreateContext();
+	ImGui::CreateContext();
 
-    ImGuiIO& io = ImGui::GetIO();
+	ImGuiIO& io = ImGui::GetIO();
 
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // --------------------------------------------------------
-    // Dear ImGui style
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Dear ImGui style
+	// --------------------------------------------------------
 
-    ImGui::StyleColorsDark();
+	ImGui::StyleColorsDark();
 
-    ImGuiStyle& style = ImGui::GetStyle();
+	ImGuiStyle& style = ImGui::GetStyle();
 
-    style.WindowRounding = 6.0f;
-    style.ChildRounding = 5.0f;
-    style.FrameRounding = 4.0f;
-    style.PopupRounding = 5.0f;
-    style.GrabRounding = 4.0f;
+	style.WindowRounding = 6.0f;
+	style.ChildRounding = 5.0f;
+	style.FrameRounding = 4.0f;
+	style.PopupRounding = 5.0f;
+	style.GrabRounding = 4.0f;
 
-    // --------------------------------------------------------
-    // Initialize platform/renderer backends
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Initialize platform/renderer backends
+	// --------------------------------------------------------
 
-    ImGui_ImplWin32_Init(hwnd);
+	ImGui_ImplWin32_Init(hwnd);
 
-    ImGui_ImplDX11_Init(
-        g_pd3dDevice,
-        g_pd3dDeviceContext
-    );
+	ImGui_ImplDX11_Init(
+		g_pd3dDevice,
+		g_pd3dDeviceContext
+	);
 
-    // Create persistent camera instance (moved outside the main loop)
-    OpenCVCam cam;
+	// Create persistent camera instance (moved outside the main loop)
+	OpenCVCam cam;
+	AudioRecorder recorder;
+	FFmpegMergeClass merger;
+	bool recordingActive = false;
 
-    // --------------------------------------------------------
-    // Main loop
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Main loop
+	// --------------------------------------------------------
 
-    MSG msg{};
+	MSG msg{};
 
-    while (g_running)
-    {
-        // ----------------------------------------------------
-        // Windows messages
-        // ----------------------------------------------------
+	while (g_running)
+	{
+		// ----------------------------------------------------
+		// Windows messages
+		// ----------------------------------------------------
 
-        while (::PeekMessage(
-            &msg,
-            nullptr,
-            0U,
-            0U,
-            PM_REMOVE))
-        {
-            ::TranslateMessage(&msg);
-            ::DispatchMessage(&msg);
+		while (::PeekMessage(
+			&msg,
+			nullptr,
+			0U,
+			0U,
+			PM_REMOVE))
+		{
+			::TranslateMessage(&msg);
+			::DispatchMessage(&msg);
 
-            if (msg.message == WM_QUIT)
-                g_running = false;
-        }
+			if (msg.message == WM_QUIT)
+				g_running = false;
+		}
 
-        if (!g_running)
-            break;
+		if (!g_running)
+			break;
 
-        ImGui_ImplDX11_NewFrame();
-        ImGui_ImplWin32_NewFrame();
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplWin32_NewFrame();
 
-        ImGui::NewFrame();
+		ImGui::NewFrame();
 
-        // ====================================================
-        // Main application window
-        // ====================================================
+		// ====================================================
+		// Main application window
+		// ====================================================
 
-        ImGui::SetNextWindowPos(
-            ImVec2(60, 60),
-            ImGuiCond_FirstUseEver
-        );
+		ImGui::SetNextWindowPos(
+			ImVec2(60, 60),
+			ImGuiCond_FirstUseEver
+		);
 
-        ImGui::SetNextWindowSize(
-            ImVec2(400, 400),
-            ImGuiCond_FirstUseEver
-        );
+		ImGui::SetNextWindowSize(
+			ImVec2(400, 400),
+			ImGuiCond_FirstUseEver
+		);
 
-        //ImVec4 bgCol = ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]);
-        //ImGuiStyleColorGuard guard(ImGuiCol_WindowBg, bgCol);
+		//ImVec4 bgCol = ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]);
+		//ImGuiStyleColorGuard guard(ImGuiCol_WindowBg, bgCol);
 
-        //ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]));
+		//ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(g_bgColor[0], g_bgColor[1], g_bgColor[2], g_bgColor[3]));
 
-        ImGui::Begin(
-            "Start WebCamObscura",
-            nullptr,
-            ImGuiWindowFlags_MenuBar
-        );
+		ImGui::Begin(
+			"Start WebCamObscura",
+			nullptr,
+			ImGuiWindowFlags_MenuBar
+		);
 
-        // ----------------------------------------------------
-        // Menu bar
-        // ----------------------------------------------------
+		// ----------------------------------------------------
+		// Menu bar
+		// ----------------------------------------------------
 
-        if (ImGui::BeginMenuBar())
-        {
-            if (ImGui::BeginMenu("File"))
-            {
-                if (ImGui::MenuItem("Exit"))
-                {
-                    if (MessageBoxA(hwnd, "Are you sure you want to close the application?", "Confirm Close", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-                        g_running = false;
-                        ::DestroyWindow(hwnd);
-                    }
-                }
-                ImGui::EndMenu();
-            }
+		if (ImGui::BeginMenuBar())
+		{
+			if (ImGui::BeginMenu("File"))
+			{
+				if (ImGui::MenuItem("Exit"))
+				{
+					if (MessageBoxA(hwnd, "Are you sure you want to close the application?", "Confirm Close", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+						g_running = false;
+						::DestroyWindow(hwnd);
+					}
+				}
+				ImGui::EndMenu();
+			}
 
-            if (ImGui::BeginMenu("View"))
-            {
+			if (ImGui::BeginMenu("View"))
+			{
 				ImGui::MenuItem("Video Recorder", nullptr, &g_recorderWindowOpen);
-                ImGui::Separator();
-                ImGui::MenuItem("Dark Mode", nullptr, &g_darkMode);
-                if (ImGui::MenuItem("Change BG Color"))
+				ImGui::Separator();
+				ImGui::MenuItem("Dark Mode", nullptr, &g_darkMode);
+				if (ImGui::MenuItem("Change BG Color"))
 					g_openmodal = true;
-                ImGui::EndMenu();
-            }
+				ImGui::EndMenu();
+			}
 
-            if (ImGui::BeginMenu("Help"))
-            {
-                if (ImGui::MenuItem("About"))
-                {
-                    MessageBoxA(
-                        hwnd,
-                        "WebCamObscura\n\n"
-                        "A Camera and Video Capture Software\n\n"
-                        "Made with Dear ImGui with Win32 and DirectX 11 and OpenCV.\n\n"
-                        "Created by: Jarred",
-                        "About WebCamObscura",
-                        MB_OK | MB_ICONINFORMATION
-                    );
-                }
-                ImGui::EndMenu();
-            }
+			if (ImGui::BeginMenu("Help"))
+			{
+				if (ImGui::MenuItem("About"))
+				{
+					MessageBoxA(
+						hwnd,
+						"WebCamObscura\n\n"
+						"A Camera and Video Capture Software\n\n"
+						"Made with Dear ImGui with Win32 and DirectX 11 and OpenCV.\n\n"
+						"Created by: Jarred",
+						"About WebCamObscura",
+						MB_OK | MB_ICONINFORMATION
+					);
+				}
+				ImGui::EndMenu();
+			}
 
-            ImGui::EndMenuBar();
-        }
-        
-        // ----------------------------------------------------
-        // Change style
-        // ----------------------------------------------------
+			ImGui::EndMenuBar();
+		}
 
-        if (g_darkMode)
-            ImGui::StyleColorsDark();
-        else
-            ImGui::StyleColorsLight();
+		// ----------------------------------------------------
+		// Change style
+		// ----------------------------------------------------
 
-        // ----------------------------------------------------
-        // Header
-        // ----------------------------------------------------
+		if (g_darkMode)
+			ImGui::StyleColorsDark();
+		else
+			ImGui::StyleColorsLight();
 
-        ImGui::Spacing();
+		// ----------------------------------------------------
+		// Header
+		// ----------------------------------------------------
 
-        ImGui::Text(
-            "Welcome to WebCamObscura"
-        );
+		ImGui::Spacing();
 
-        ImGui::Separator();
+		ImGui::Text(
+			"Welcome to WebCamObscura"
+		);
 
-        ImGui::Spacing();
+		ImGui::Separator();
 
-        // ----------------------------------------------------
-        // Camera Selection
-        // ----------------------------------------------------
+		ImGui::Spacing();
 
-        ImGui::Text("Select Camera:");
+		// ----------------------------------------------------
+		// Camera Selection
+		// ----------------------------------------------------
 
-        ImGui::Indent();
+		ImGui::Text("Select Camera:");
 
-        ImGui::DragInt(
-            "Camera Index",
-            &g_selectedCameraIndex,
-            1.0f,
-            0,
-            10
-        );
+		ImGui::Indent();
 
-        ImGui::Unindent();
+		ImGui::DragInt(
+			"Camera Index",
+			&g_selectedCameraIndex,
+			1.0f,
+			0,
+			10
+		);
 
-        ImGui::Spacing();
+		ImGui::Unindent();
 
-        ImGui::Text("Resolution: ");
-        ImGui::Indent();
+		ImGui::Spacing();
 
-        ImGui::DragInt(
-            "Width",
-            &g_width,
-            1.0f,
-            320,
-            1920
-        );
+		ImGui::Text("Resolution: ");
+		ImGui::Indent();
 
-        //ImGui::SameLine();
+		ImGui::DragInt(
+			"Width",
+			&g_width,
+			1.0f,
+			320,
+			1920
+		);
 
-        ImGui::DragInt(
-            "Height",
-            &g_height,
-            1.0f,
-            320,
-            1920
-        );
+		//ImGui::SameLine();
 
-        ImGui::Unindent();
-        ImGui::Spacing();
+		ImGui::DragInt(
+			"Height",
+			&g_height,
+			1.0f,
+			320,
+			1920
+		);
 
-        // ----------------------------------------------------
-        // Start/Stop Button
-        // ----------------------------------------------------
+		ImGui::Unindent();
+		ImGui::Spacing();
 
-        if (ImGui::Button(
-            "Start Viewing",
-            ImVec2(150, 40)
-        ))
-        {
+		// ----------------------------------------------------
+		// Start/Stop Button
+		// ----------------------------------------------------
+
+		if (ImGui::Button(
+			"Start Viewing",
+			ImVec2(150, 40)
+		))
+		{
 			if (cam.isCameraIdExist(g_selectedCameraIndex) == false)
 			{
 				MessageBoxA(
 					hwnd,
 					"The selected camera index does not exist.\n"
-                    "Please select a valid camera index or insert/reinsert the video capture device.",
+					"Please select a valid camera index or insert/reinsert the video capture device.",
 					"Error",
 					MB_OK | MB_ICONERROR
 				);
 				continue;
 			}
 
-            try {
-                cam.setCameraId(g_selectedCameraIndex);
-                cam.setResolution(g_width, g_height);
-                cam.start();
-            }
-            catch (const std::exception& e) {
-                MessageBoxA(
-                    hwnd,
-                    e.what(),
-                    "Error",
-                    MB_OK | MB_ICONERROR
-                );
-            }
-        }
+			try {
+				cam.setCameraId(g_selectedCameraIndex);
+				cam.setResolution(g_width, g_height);
+				cam.start();
+			}
+			catch (const std::exception& e) {
+				MessageBoxA(
+					hwnd,
+					e.what(),
+					"Error",
+					MB_OK | MB_ICONERROR
+				);
+			}
+		}
 
-        ImGui::SameLine();
+		ImGui::SameLine();
 
-        if (ImGui::Button(
-            "Stop Viewing",
-            ImVec2(150, 40)
-        ))
-        {
-            cam.stop();
-        }
+		if (ImGui::Button(
+			"Stop Viewing",
+			ImVec2(150, 40)
+		))
+		{
+			cam.stop();
+		}
 
-        ImGui::Spacing();
+		ImGui::Spacing();
 
-        // ----------------------------------------------------
-        // Status panel
-        // ----------------------------------------------------
+		// ----------------------------------------------------
+		// Status panel
+		// ----------------------------------------------------
 
-        ImGui::BeginChild(
-            "StatusPanel",
-            ImVec2(0, 120),
-            true
-        );
+		ImGui::BeginChild(
+			"StatusPanel",
+			ImVec2(0, 120),
+			true
+		);
 
-        ImGui::Text("Status and Information");
+		ImGui::Text("Status and Information");
 
-        ImGui::Separator();
+		ImGui::Separator();
 
-        ImGui::Text(
-            "Camera Index: %d",
-            g_selectedCameraIndex
-        );
+		ImGui::Text(
+			"Camera Index: %d",
+			g_selectedCameraIndex
+		);
 
-        ImGui::Text(
-            "Resolution: %dx%d",
-            g_width,
-            g_height
-        );
+		ImGui::Text(
+			"Resolution: %dx%d",
+			g_width,
+			g_height
+		);
 
-        if (cam.isOpened())
-        {
-            ImGui::Text(
-                "Camera is Opened: Yes"
-            );
-        }
-        else
-        {
-            ImGui::Text(
-                "Camera is Opened: No"
-            );
-        }
+		if (cam.isOpened())
+		{
+			ImGui::Text(
+				"Camera is Opened: Yes"
+			);
+		}
+		else
+		{
+			ImGui::Text(
+				"Camera is Opened: No"
+			);
+		}
 
-        ImGui::EndChild();
+		ImGui::EndChild();
 
-        // ----------------------------------------------------
-        // Footer
-        // ----------------------------------------------------
+		// ----------------------------------------------------
+		// Footer
+		// ----------------------------------------------------
 
-        ImGui::Spacing();
+		ImGui::Spacing();
 
-        ImGui::Separator();
+		ImGui::Separator();
 
-        ImGui::TextDisabled(
-            "Created by: Jarred | Please put a star on my GitHub Repo!"
-        );
+		ImGui::TextDisabled(
+			"Created by: Jarred | Please put a star on my GitHub Repo!"
+		);
 
-        ImGui::End();
+		ImGui::End();
 
-        // ====================================================
-        // Record window
-        // ====================================================
+		// ====================================================
+		// Record window
+		// ====================================================
 
-        if (g_recorderWindowOpen)
-        {
-            ImGui::Begin("Video Recorder", &g_recorderWindowOpen);
-            
-            ImGui::Text("Video File Name:");
+		if (g_recorderWindowOpen)
+		{
+			ImGui::Begin("Video Recorder", &g_recorderWindowOpen);
+
+			ImGui::Text("Video File Name:");
 			ImGui::Indent();
-			ImGui::InputText("File Name", (char *)g_videoFileName.c_str(), g_videoFileName.length() + 1);
+			if (ImGui::InputText("File Name", g_videoFileNameBuffer, sizeof(g_videoFileNameBuffer)))
+			{
+				g_videoFileName = g_videoFileNameBuffer;
+			}
 			ImGui::SameLine();
 			if (ImGui::Button("Browse"))
 			{
@@ -490,50 +511,101 @@ int WINAPI WinMain(
 				ofn.hwndOwner = hwnd;
 				ofn.lpstrFile = szFile;
 				ofn.nMaxFile = sizeof(szFile);
-				ofn.lpstrFilter = "AVI Files\0*.avi\0All Files\0*.*\0";
+				ofn.lpstrFilter = "MP4 Files\0*.mp4\0All Files\0*.*\0";
 				ofn.nFilterIndex = 1;
 				ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
 				if (GetSaveFileNameA(&ofn) == TRUE)
 				{
 					g_videoFileName = std::string(szFile);
+					strncpy_s(
+						g_videoFileNameBuffer,
+						sizeof(g_videoFileNameBuffer),
+						g_videoFileName.c_str(),
+						_TRUNCATE
+					);
 				}
 			}
-            ImGui::Unindent();
+			ImGui::Unindent();
 
 			ImGui::Spacing();
 
 			if (ImGui::Button("Start Recording"))
 			{
-				try {
-					cam.startRecording(g_videoFileName);
-				}
-				catch (const std::exception& e) {
-					MessageBoxA(
-						hwnd,
-						e.what(),
-						"Error",
-						MB_OK | MB_ICONERROR
+				if (!recordingActive && cam.isOpened() && !g_videoFileName.empty())
+				{
+					std::string temp(
+						GetDirectoryFromFilePathManual(
+							g_videoFileName
+						)
 					);
+
+					std::string tempAud(temp + "\\temp.wav");
+					std::string tempVid(temp + "\\temp.avi");
+
+					try {
+						cam.startRecording(tempVid);
+						recorder.Start(0, tempAud);
+						recordingActive = true;
+					}
+					catch (const std::exception& e) {
+						MessageBoxA(
+							hwnd,
+							e.what(),
+							"Error",
+							MB_OK | MB_ICONERROR
+						);
+					}
+				}
+				else if (recordingActive)
+				{
+					MessageBoxA(hwnd, "Recording is already in progress.", "Error", MB_OK | MB_ICONERROR);
+				}
+				else if (!cam.isOpened())
+				{
+					MessageBoxA(hwnd, "Start the camera before recording.", "Error", MB_OK | MB_ICONERROR);
+				}
+				else
+				{
+					MessageBoxA(hwnd, "Choose an output video file first.", "Error", MB_OK | MB_ICONERROR);
 				}
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Stop Recording"))
 			{
-				cam.stopRecording();
+				if (recordingActive)
+				{
+					cam.stopRecording();
+					recorder.Stop();
+					recordingActive = false;
+
+					std::string temp(
+						GetDirectoryFromFilePathManual(
+							g_videoFileName
+						)
+					);
+
+					std::string tempAud(temp + "\\temp.wav");
+					std::string tempVid(temp + "\\temp.avi");
+
+					if (!merger.MergeAudioVideo(tempVid, tempAud, g_videoFileName))
+					{
+						MessageBoxA(hwnd, "FFmpeg could not be started. Temporary files were kept.", "Error", MB_OK | MB_ICONERROR);
+					}
+				}
 			}
 
-            ImGui::Spacing();
+			ImGui::Spacing();
 
 			ImGui::Separator();
 
-            ImGui::Text("Recording Status: %s", cam.getVideoStatus().c_str());
+			ImGui::Text("Recording Status: %s", cam.getVideoStatus().c_str());
 
-            ImGui::End();
-        }
+			ImGui::End();
+		}
 
-        // ====================================================
-        // Change BG Color window
-        // ====================================================
+		// ====================================================
+		// Change BG Color window
+		// ====================================================
 
 		if (g_openmodal)
 		{
@@ -541,83 +613,83 @@ int WINAPI WinMain(
 			g_openmodal = false;
 		}
 
-        ImGui::SetNextWindowSize(ImVec2(300, 430), ImGuiCond_FirstUseEver);
-        if (ImGui::BeginPopupModal("Change BG Color", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            ImGui::Text("Select Background Color");
-            ImGui::Separator();
-            ImGui::ColorPicker4("##picker", g_bgColor, ImGuiColorEditFlags_AlphaBar);
-            ImGui::Spacing();
-            if (ImGui::Button("Close", ImVec2(120, 0)))
-                ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-        }
+		ImGui::SetNextWindowSize(ImVec2(300, 430), ImGuiCond_FirstUseEver);
+		if (ImGui::BeginPopupModal("Change BG Color", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Select Background Color");
+			ImGui::Separator();
+			ImGui::ColorPicker4("##picker", g_bgColor, ImGuiColorEditFlags_AlphaBar);
+			ImGui::Spacing();
+			if (ImGui::Button("Close", ImVec2(120, 0)))
+				ImGui::CloseCurrentPopup();
+			ImGui::EndPopup();
+		}
 
 		//ImGui::PopStyleColor();
 
-        // ====================================================
-        // Rendering
-        // ====================================================
+		// ====================================================
+		// Rendering
+		// ====================================================
 
-        ImGui::Render();
+		ImGui::Render();
 
-        //const float clearColor[4] =
-        //{
-        //    0.08f,
-        //    0.08f,
-        //    0.08f,
-        //    1.0f
-        //};
+		//const float clearColor[4] =
+		//{
+		//    0.08f,
+		//    0.08f,
+		//    0.08f,
+		//    1.0f
+		//};
 
-        g_pd3dDeviceContext->OMSetRenderTargets(
-            1,
-            &g_mainRenderTargetView,
-            nullptr
-        );
+		g_pd3dDeviceContext->OMSetRenderTargets(
+			1,
+			&g_mainRenderTargetView,
+			nullptr
+		);
 
-        //g_pd3dDeviceContext->ClearRenderTargetView(
-        //    g_mainRenderTargetView,
-        //    clearColor
-        //);
+		//g_pd3dDeviceContext->ClearRenderTargetView(
+		//    g_mainRenderTargetView,
+		//    clearColor
+		//);
 
-        g_pd3dDeviceContext->ClearRenderTargetView(
-            g_mainRenderTargetView,
-            g_bgColor
-        );
+		g_pd3dDeviceContext->ClearRenderTargetView(
+			g_mainRenderTargetView,
+			g_bgColor
+		);
 
-        ImGui_ImplDX11_RenderDrawData(
-            ImGui::GetDrawData()
-        );
+		ImGui_ImplDX11_RenderDrawData(
+			ImGui::GetDrawData()
+		);
 
-        g_pSwapChain->Present(
-            1,
-            0
-        );
-    }
+		g_pSwapChain->Present(
+			1,
+			0
+		);
+	}
 
-    // --------------------------------------------------------
-    // Shutdown Dear ImGui
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Shutdown Dear ImGui
+	// --------------------------------------------------------
 
-    ImGui_ImplDX11_Shutdown();
-    ImGui_ImplWin32_Shutdown();
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplWin32_Shutdown();
 
-    ImGui::DestroyContext();
+	ImGui::DestroyContext();
 
-    // --------------------------------------------------------
-    // Cleanup DirectX
-    // --------------------------------------------------------
+	// --------------------------------------------------------
+	// Cleanup DirectX
+	// --------------------------------------------------------
 
-    CleanupDeviceD3D();
+	CleanupDeviceD3D();
 
-    ::DestroyWindow(hwnd);
+	::DestroyWindow(hwnd);
 
-    ::UnregisterClassW(
-        wc.lpszClassName,
-        wc.hInstance
-    );
+	::UnregisterClassW(
+		wc.lpszClassName,
+		wc.hInstance
+	);
 
-    return 0;
+	return 0;
 }
 
 // ------------------------------------------------------------
@@ -626,66 +698,66 @@ int WINAPI WinMain(
 
 bool CreateDeviceD3D(HWND hWnd)
 {
-    DXGI_SWAP_CHAIN_DESC sd{};
+	DXGI_SWAP_CHAIN_DESC sd;
 
-    sd.BufferCount = 2;
+	sd.BufferCount = 2;
 
-    sd.BufferDesc.Width = 0;
-    sd.BufferDesc.Height = 0;
+	sd.BufferDesc.Width = 0;
+	sd.BufferDesc.Height = 0;
 
-    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    sd.BufferDesc.RefreshRate.Numerator = 60;
-    sd.BufferDesc.RefreshRate.Denominator = 1;
+	sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	sd.BufferDesc.RefreshRate.Numerator = 60;
+	sd.BufferDesc.RefreshRate.Denominator = 1;
 
-    sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+	sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-    sd.BufferUsage =
-        DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	sd.BufferUsage =
+		DXGI_USAGE_RENDER_TARGET_OUTPUT;
 
-    sd.OutputWindow = hWnd;
+	sd.OutputWindow = hWnd;
 
-    sd.SampleDesc.Count = 1;
-    sd.SampleDesc.Quality = 0;
+	sd.SampleDesc.Count = 1;
+	sd.SampleDesc.Quality = 0;
 
-    sd.Windowed = TRUE;
+	sd.Windowed = TRUE;
 
-    sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
-    UINT createDeviceFlags = 0;
+	UINT createDeviceFlags = 0;
 
 #ifdef _DEBUG
-    createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-    D3D_FEATURE_LEVEL featureLevel;
+	D3D_FEATURE_LEVEL featureLevel;
 
-    const D3D_FEATURE_LEVEL featureLevelArray[] =
-    {
-        D3D_FEATURE_LEVEL_11_0,
-        D3D_FEATURE_LEVEL_10_0
-    };
+	const D3D_FEATURE_LEVEL featureLevelArray[] =
+	{
+		D3D_FEATURE_LEVEL_11_0,
+		D3D_FEATURE_LEVEL_10_0
+	};
 
-    HRESULT result = D3D11CreateDeviceAndSwapChain(
-        nullptr,
-        D3D_DRIVER_TYPE_HARDWARE,
-        nullptr,
-        createDeviceFlags,
-        featureLevelArray,
-        ARRAYSIZE(featureLevelArray),
-        D3D11_SDK_VERSION,
-        &sd,
-        &g_pSwapChain,
-        &g_pd3dDevice,
-        &featureLevel,
-        &g_pd3dDeviceContext
-    );
+	HRESULT result = D3D11CreateDeviceAndSwapChain(
+		nullptr,
+		D3D_DRIVER_TYPE_HARDWARE,
+		nullptr,
+		createDeviceFlags,
+		featureLevelArray,
+		ARRAYSIZE(featureLevelArray),
+		D3D11_SDK_VERSION,
+		&sd,
+		&g_pSwapChain,
+		&g_pd3dDevice,
+		&featureLevel,
+		&g_pd3dDeviceContext
+	);
 
-    if (result != S_OK)
-        return false;
+	if (result != S_OK)
+		return false;
 
-    CreateRenderTarget();
+	CreateRenderTarget();
 
-    return true;
+	return true;
 }
 
 // ------------------------------------------------------------
@@ -694,24 +766,24 @@ bool CreateDeviceD3D(HWND hWnd)
 
 void CreateRenderTarget()
 {
-    ID3D11Texture2D* backBuffer = nullptr;
+	ID3D11Texture2D* backBuffer = nullptr;
 
-    HRESULT result =
-        g_pSwapChain->GetBuffer(
-            0,
-            IID_PPV_ARGS(&backBuffer)
-        );
+	HRESULT result =
+		g_pSwapChain->GetBuffer(
+			0,
+			IID_PPV_ARGS(&backBuffer)
+		);
 
-    if (SUCCEEDED(result))
-    {
-        g_pd3dDevice->CreateRenderTargetView(
-            backBuffer,
-            nullptr,
-            &g_mainRenderTargetView
-        );
+	if (SUCCEEDED(result))
+	{
+		g_pd3dDevice->CreateRenderTargetView(
+			backBuffer,
+			nullptr,
+			&g_mainRenderTargetView
+		);
 
-        backBuffer->Release();
-    }
+		backBuffer->Release();
+	}
 }
 
 // ------------------------------------------------------------
@@ -720,11 +792,11 @@ void CreateRenderTarget()
 
 void CleanupRenderTarget()
 {
-    if (g_mainRenderTargetView)
-    {
-        g_mainRenderTargetView->Release();
-        g_mainRenderTargetView = nullptr;
-    }
+	if (g_mainRenderTargetView)
+	{
+		g_mainRenderTargetView->Release();
+		g_mainRenderTargetView = nullptr;
+	}
 }
 
 // ------------------------------------------------------------
@@ -733,25 +805,25 @@ void CleanupRenderTarget()
 
 void CleanupDeviceD3D()
 {
-    CleanupRenderTarget();
+	CleanupRenderTarget();
 
-    if (g_pSwapChain)
-    {
-        g_pSwapChain->Release();
-        g_pSwapChain = nullptr;
-    }
+	if (g_pSwapChain)
+	{
+		g_pSwapChain->Release();
+		g_pSwapChain = nullptr;
+	}
 
-    if (g_pd3dDeviceContext)
-    {
-        g_pd3dDeviceContext->Release();
-        g_pd3dDeviceContext = nullptr;
-    }
+	if (g_pd3dDeviceContext)
+	{
+		g_pd3dDeviceContext->Release();
+		g_pd3dDeviceContext = nullptr;
+	}
 
-    if (g_pd3dDevice)
-    {
-        g_pd3dDevice->Release();
-        g_pd3dDevice = nullptr;
-    }
+	if (g_pd3dDevice)
+	{
+		g_pd3dDevice->Release();
+		g_pd3dDevice = nullptr;
+	}
 }
 
 // ------------------------------------------------------------
@@ -760,83 +832,83 @@ void CleanupDeviceD3D()
 
 extern IMGUI_IMPL_API LRESULT
 ImGui_ImplWin32_WndProcHandler(
-    HWND hWnd,
-    UINT msg,
-    WPARAM wParam,
-    LPARAM lParam
+	HWND hWnd,
+	UINT msg,
+	WPARAM wParam,
+	LPARAM lParam
 );
 
 LRESULT WINAPI WndProc(
-    HWND hWnd,
-    UINT msg,
-    WPARAM wParam,
-    LPARAM lParam
+	HWND hWnd,
+	UINT msg,
+	WPARAM wParam,
+	LPARAM lParam
 )
 {
-    // Let Dear ImGui process input first.
-    if (ImGui_ImplWin32_WndProcHandler(
-        hWnd,
-        msg,
-        wParam,
-        lParam))
-    {
-        return true;
-    }
+	// Let Dear ImGui process input first.
+	if (ImGui_ImplWin32_WndProcHandler(
+		hWnd,
+		msg,
+		wParam,
+		lParam))
+	{
+		return true;
+	}
 
-    switch (msg)
-    {
-        case WM_SIZE:
-        {
-            if (g_pd3dDevice != nullptr &&
-                wParam != SIZE_MINIMIZED)
-            {
-                CleanupRenderTarget();
-
-                g_pSwapChain->ResizeBuffers(
-                    0,
-                    static_cast<UINT>(LOWORD(lParam)),
-                    static_cast<UINT>(HIWORD(lParam)),
-                    DXGI_FORMAT_UNKNOWN,
-                    0
-                );
-
-                CreateRenderTarget();
-            }
-
-            return 0;
-        }
-
-        case WM_SYSCOMMAND:
-        {
-            if ((wParam & 0xfff0) == SC_KEYMENU)
-                return 0;
-
-            break;
-        }
-
-		case WM_CLOSE:
+	switch (msg)
+	{
+	case WM_SIZE:
+	{
+		if (g_pd3dDevice != nullptr &&
+			wParam != SIZE_MINIMIZED)
 		{
-            if (MessageBoxA(hWnd, "Are you sure you want to close the application?", "Confirm Close", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-				g_running = false;
-				::DestroyWindow(hWnd);
-            }
-			return 0;
+			CleanupRenderTarget();
+
+			g_pSwapChain->ResizeBuffers(
+				0,
+				static_cast<UINT>(LOWORD(lParam)),
+				static_cast<UINT>(HIWORD(lParam)),
+				DXGI_FORMAT_UNKNOWN,
+				0
+			);
+
+			CreateRenderTarget();
 		}
 
-        case WM_DESTROY:
-        {
-            g_running = false;
+		return 0;
+	}
 
-            ::PostQuitMessage(0);
+	case WM_SYSCOMMAND:
+	{
+		if ((wParam & 0xfff0) == SC_KEYMENU)
+			return 0;
 
-            return 0;
-        }
-    }
+		break;
+	}
 
-    return ::DefWindowProcW(
-        hWnd,
-        msg,
-        wParam,
-        lParam
-    );
+	case WM_CLOSE:
+	{
+		if (MessageBoxA(hWnd, "Are you sure you want to close the application?", "Confirm Close", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+			g_running = false;
+			::DestroyWindow(hWnd);
+		}
+		return 0;
+	}
+
+	case WM_DESTROY:
+	{
+		g_running = false;
+
+		::PostQuitMessage(0);
+
+		return 0;
+	}
+	}
+
+	return ::DefWindowProcW(
+		hWnd,
+		msg,
+		wParam,
+		lParam
+	);
 }

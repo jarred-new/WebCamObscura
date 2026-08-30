@@ -36,8 +36,10 @@ private:
 
     double fps;
 
-    std::string videoStatus; // for video rocording status
-	bool isRecording = false;
+    std::string videoStatus;
+    mutable std::mutex statusMutex;
+	std::atomic<bool> isRecording{ false };
+	std::thread recordingWorker;
 
     // worker + synchronization for showing/grabbing frames
     std::atomic<bool> running;

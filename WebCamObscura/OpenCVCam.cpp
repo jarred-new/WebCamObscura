@@ -1,5 +1,7 @@
 #include "OpenCVCam.h"
 
+#include <algorithm>
+
 bool OpenCVCam::start() {
     if (opened) return true;
 
@@ -57,6 +59,7 @@ bool OpenCVCam::start() {
 }
 
 void OpenCVCam::stop() {
+    stopRecording();
     running = false;
     if (worker.joinable()) worker.join();
 
@@ -99,12 +102,16 @@ bool OpenCVCam::isCameraIdExist(int id) {
 
 void OpenCVCam::startRecording(const std::string& filename)
 {
-	isRecording = true;
     if (!opened) {
+        std::lock_guard<std::mutex> lk(statusMutex);
         videoStatus = "Camera is not opened. Cannot start recording.";
         isRecording = false;
         return;
     }
+
+    if (isRecording.load()) return;
+
+    if (recordingWorker.joinable()) recordingWorker.join();
 
     int fourcc = 0;
     
@@ -115,53 +122,67 @@ void OpenCVCam::startRecording(const std::string& filename)
 		else if (ext == "mp4") fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
 		else if (ext == "mov") fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
 		else {
-			videoStatus = "Unsupported video format for recording.";
+            std::lock_guard<std::mutex> lk(statusMutex);
+            videoStatus = "Unsupported video format for recording.";
             isRecording = false;
             return;
 		}
 	}
 
-	cv::VideoWriter writer(
-        filename, 
-        fourcc, 
-        fps, 
-        cv::Size(this->width, this->height), 
-        true
-    );
-
-	if (!writer.isOpened()) {
-		videoStatus = "Failed to open video writer for recording.";
-        isRecording = false;
-        return;
-	}
-
-    while (running && isRecording) {
-        cv::Mat frame;
-        cap >> frame;
-        if (!grabFrame(frame)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;
-        }
-        writer.write(frame);
+    isRecording = true;
+    {
+        std::lock_guard<std::mutex> lk(statusMutex);
         videoStatus = "Recording to " + filename + " at " + std::to_string(fps) + " FPS.";
     }
 
-	// Release the writer when done
-	if (writer.isOpened() && (isRecording == false)) {
+    recordingWorker = std::thread([this, filename, fourcc]() {
+        cv::VideoWriter writer(
+            filename,
+            fourcc,
+            fps,
+            cv::Size(width, height),
+            true
+        );
+
+        if (!writer.isOpened()) {
+            std::lock_guard<std::mutex> lk(statusMutex);
+            videoStatus = "Failed to open video writer for recording.";
+            isRecording = false;
+            return;
+        }
+
+        const auto frameDelay = std::chrono::milliseconds(
+            static_cast<int>(1000.0 / std::max(fps, 1.0))
+        );
+
+        while (running && isRecording.load()) {
+            cv::Mat frame;
+            if (grabFrame(frame) && !frame.empty()) {
+                if (frame.size() != cv::Size(width, height)) {
+                    cv::resize(frame, frame, cv::Size(width, height));
+                }
+                writer.write(frame);
+            }
+            std::this_thread::sleep_for(frameDelay);
+        }
+
         writer.release();
-        videoStatus = "Recording stopped.";
-	}
+        if (!isRecording.load()) {
+            std::lock_guard<std::mutex> lk(statusMutex);
+            videoStatus = "Recording stopped.";
+        }
+    });
 }
 
 void OpenCVCam::stopRecording()
 {
-	//running = false;
 	isRecording = false;
-	//videoStatus = "Recording stopped.";
+    if (recordingWorker.joinable()) recordingWorker.join();
 }
 
 std::string OpenCVCam::getVideoStatus() const
 {
+    std::lock_guard<std::mutex> lk(statusMutex);
 	if (videoStatus.empty()) {
 		return "No recording in progress.";
 	}
