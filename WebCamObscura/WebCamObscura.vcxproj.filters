@@ -83,5 +83,21 @@
     <ClInclude Include="FFmpegMergeClass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="WebCamObscura.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\..\..\Downloads\WebCamObscura.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="res\WebCamObscura.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

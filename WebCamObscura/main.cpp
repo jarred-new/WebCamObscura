@@ -8,6 +8,7 @@
 #include "OpenCVCam.h"
 #include "AudioRecorder.h"
 #include "FFmpegMergeClass.h"
+#include "resource.h"
 
 #pragma comment(lib, "d3d11.lib")
 
@@ -114,12 +115,12 @@ int WINAPI WinMain(
 		0L,
 		0L,
 		hInstance,
-		nullptr,
+		::LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MAINICON)),
 		nullptr,
 		nullptr,
 		nullptr,
 		L"WebCamObscura",
-		nullptr
+		::LoadIcon(hInstance, MAKEINTRESOURCE(IDI_MAINICON))
 	};
 
 	::RegisterClassExW(&wc);
