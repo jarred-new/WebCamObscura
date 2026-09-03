@@ -46,4 +46,5 @@ private:
     std::thread worker;
     std::mutex frameMutex;
     cv::Mat latestFrame;
+    std::atomic<uint64_t> capturedFrames{ 0 };
 };

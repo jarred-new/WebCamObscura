@@ -40,6 +40,8 @@ bool OpenCVCam::start() {
             {
                 std::lock_guard<std::mutex> lk(frameMutex);
                 frame.copyTo(latestFrame);
+                // Count captured frames for accurate framerate measurement
+                capturedFrames.fetch_add(1, std::memory_order_relaxed);
             }
 
             // show frame in its own OpenCV window
