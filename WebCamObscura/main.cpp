@@ -76,12 +76,17 @@ static bool g_running = true;
 static bool g_darkMode = true;
 
 static int g_selectedCameraIndex = 0;
+static int g_selectedMicrophoneIndex = 0;
 static bool g_openmodal = false;
 static float g_bgColor[4] = { 0.08f, 0.08f, 0.08f, 1.0f };
 
 static bool g_recorderWindowOpen = false;
-static std::string g_videoFileName = "output.avi";
-static char g_videoFileNameBuffer[MAX_PATH] = "output.avi";
+static std::string g_videoFileName = "";
+static char g_videoFileNameBuffer[MAX_PATH] = "";
+
+static std::string g_recordTimeStr = "";
+static bool g_showConsoleCheck = false;
+static bool g_deleteCheck = true;
 
 static int g_width = 640;
 static int g_height = 480;
@@ -345,13 +350,21 @@ int WINAPI WinMain(
 		// Camera Selection
 		// ----------------------------------------------------
 
-		ImGui::Text("Select Camera:");
+		ImGui::Text("Select Camera and Microphone:");
 
 		ImGui::Indent();
 
 		ImGui::DragInt(
 			"Camera Index",
 			&g_selectedCameraIndex,
+			1.0f,
+			0,
+			10
+		);
+
+		ImGui::DragInt(
+			"Microphone Index",
+			&g_selectedMicrophoneIndex,
 			1.0f,
 			0,
 			10
@@ -525,6 +538,11 @@ int WINAPI WinMain(
 					);
 				}
 			}
+
+			ImGui::Checkbox("Show FFmpeg Console", &g_showConsoleCheck);
+			ImGui::SameLine();
+			ImGui::Checkbox("Delete temp audio and video", &g_deleteCheck);
+
 			ImGui::Unindent();
 
 			ImGui::Spacing();
@@ -544,7 +562,7 @@ int WINAPI WinMain(
 
 					try {
 						cam.startRecording(tempVid);
-						recorder.Start(0, tempAud);
+						recorder.Start(g_selectedMicrophoneIndex, tempAud);
 						recordingActive = true;
 					}
 					catch (const std::exception& e) {
@@ -587,7 +605,12 @@ int WINAPI WinMain(
 					std::string tempAud(temp + "\\temp.wav");
 					std::string tempVid(temp + "\\temp.avi");
 
-					if (!merger.MergeAudioVideo(tempVid, tempAud, g_videoFileName))
+					if (!merger.MergeAudioVideo(
+						tempVid, 
+						tempAud, 
+						g_videoFileName,
+						g_showConsoleCheck,
+						g_deleteCheck))
 					{
 						MessageBoxA(hwnd, "FFmpeg could not be started. Temporary files were kept.", "Error", MB_OK | MB_ICONERROR);
 					}

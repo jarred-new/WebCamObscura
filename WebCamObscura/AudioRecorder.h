@@ -39,5 +39,9 @@ private:
     int m_channels = 1;
     int m_bitsPerSample = 16;
 
+    // If the capture device provides 32-bit float samples we convert
+    // them to 16-bit PCM before writing to the WAV file.
+    bool m_convertFloatTo16 = false;
+
     std::mutex m_mutex;
 };

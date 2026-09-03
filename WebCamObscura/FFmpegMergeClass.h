@@ -17,7 +17,8 @@ public:
 		const std::string& videoFile,
 		const std::string& audioFile,
 		const std::string& outputFile,
-		const bool showFFmpegConsole
+		const bool& showFFmpegConsole,
+		const bool& deleteTemp
 	);
 
 private:

@@ -166,6 +166,16 @@ void OpenCVCam::startRecording(const std::string& filename)
             std::this_thread::sleep_for(frameDelay);
         }
 
+        // Attempt to grab and write one final frame to reduce chance
+        // of the recorded video freezing on the last frame.
+        cv::Mat finalFrame;
+        if (grabFrame(finalFrame) && !finalFrame.empty()) {
+            if (finalFrame.size() != cv::Size(width, height)) {
+                cv::resize(finalFrame, finalFrame, cv::Size(width, height));
+            }
+            writer.write(finalFrame);
+        }
+
         writer.release();
         if (!isRecording.load()) {
             std::lock_guard<std::mutex> lk(statusMutex);

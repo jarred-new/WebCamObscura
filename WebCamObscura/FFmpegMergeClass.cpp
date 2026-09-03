@@ -14,7 +14,9 @@ bool FFmpegMergeClass::MergeAudioVideo(
     const std::string& videoFile, 
     const std::string& audioFile, 
     const std::string& outputFile,
-    const bool showFFmpegConsole)
+    const bool& showFFmpegConsole,
+    const bool& deleteTemp
+)
 {
     const std::wstring ffmpegPath = GetFFmpegPath();
     const std::wstring videoPath(videoFile.begin(), videoFile.end());
@@ -37,7 +39,7 @@ bool FFmpegMergeClass::MergeAudioVideo(
         nullptr,
         nullptr,
         FALSE,
-        CREATE_NO_WINDOW,
+        (showFFmpegConsole ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW),
         nullptr,
         nullptr,
         &startupInfo,
@@ -48,7 +50,8 @@ bool FFmpegMergeClass::MergeAudioVideo(
     std::thread([
         processInfo,
         videoPath,
-        audioPath
+        audioPath,
+        deleteTemp
     ]() mutable {
         WaitForSingleObject(processInfo.hProcess, INFINITE);
         DWORD exitCode = 1;
@@ -56,8 +59,10 @@ bool FFmpegMergeClass::MergeAudioVideo(
         CloseHandle(processInfo.hProcess);
         CloseHandle(processInfo.hThread);
         if (exitCode == 0) {
-            DeleteFileW(videoPath.c_str());
-            DeleteFileW(audioPath.c_str());
+            if (deleteTemp == true) {
+                DeleteFileW(videoPath.c_str());
+                DeleteFileW(audioPath.c_str());
+            }
         }
     }).detach();
 

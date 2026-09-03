@@ -4,6 +4,7 @@
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <avrt.h>
+#include <mmreg.h>
 
 #include <algorithm>
 #include <chrono>
@@ -257,16 +258,27 @@ void AudioRecorder::RecordingThread(
         if (FAILED(hr))
             break;
 
-        // We record mono 16-bit PCM.
-        //
-        // WASAPI shared mode normally provides the device's native
-        // mix format, which may be float/stereo/etc.
-        //
-        // For a production recorder, use the mix format directly
-        // or add a conversion stage.
+        // Get device parameters. We will write 16-bit PCM WAV.
+        // If the device provides float samples we convert them to
+        // 16-bit PCM on the fly.
         m_sampleRate = mixFormat->nSamplesPerSec;
         m_channels = mixFormat->nChannels;
         m_bitsPerSample = mixFormat->wBitsPerSample;
+
+        // Decide whether we need to convert float -> 16-bit PCM.
+        // Commonly devices provide IEEE float (32-bit). Treat any
+        // non-PCM 32-bit format as float for conversion purposes.
+        m_convertFloatTo16 = (mixFormat->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) ||
+            (mixFormat->wBitsPerSample == 32 && mixFormat->wFormatTag != WAVE_FORMAT_PCM);
+
+        // We always write 16-bit PCM to file for compatibility.
+        if (m_convertFloatTo16) {
+            m_bitsPerSample = 16;
+        }
+
+        // Remember the device's original bits per sample so we can
+        // compute incoming buffer sizes after freeing the mixFormat.
+        const int deviceBitsPerSample = mixFormat->wBitsPerSample;
 
         const REFERENCE_TIME bufferDuration =
             10000000; // 1 second
@@ -348,39 +360,50 @@ void AudioRecorder::RecordingThread(
                 if (FAILED(hr))
                     break;
 
-                const uint32_t bytesPerFrame =
-                    static_cast<uint32_t>(
-                        m_channels *
-                        (m_bitsPerSample / 8)
-                        );
+                const uint32_t deviceBytesPerSample =
+                    static_cast<uint32_t>(m_channels * (deviceBitsPerSample / 8));
 
-                const uint32_t byteCount =
-                    numFrames * bytesPerFrame;
+                // Number of bytes in the capture buffer as provided by the device
+                const uint32_t deviceByteCount = numFrames * deviceBytesPerSample;
 
                 if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT))
                 {
-                    wav.write(
-                        reinterpret_cast<const char*>(data),
-                        byteCount
-                    );
+                    if (m_convertFloatTo16) {
+                        // Convert float32 samples to int16 PCM.
+                        const float* src = reinterpret_cast<const float*>(data);
+                        const size_t sampleCount = static_cast<size_t>(numFrames) * static_cast<size_t>(m_channels);
+                        std::vector<int16_t> conv;
+                        conv.reserve(sampleCount);
+                        for (size_t i = 0; i < sampleCount; ++i) {
+                            float s = src[i];
+                            // Clamp and scale
+                            if (s > 1.0f) s = 1.0f;
+                            if (s < -1.0f) s = -1.0f;
+                            conv.push_back(static_cast<int16_t>(s * 32767.0f));
+                        }
+
+                        const uint32_t outBytes = static_cast<uint32_t>(conv.size() * sizeof(int16_t));
+                        wav.write(reinterpret_cast<const char*>(conv.data()), outBytes);
+                        totalDataBytes += outBytes;
+                    }
+                    else {
+                        wav.write(reinterpret_cast<const char*>(data), deviceByteCount);
+                        totalDataBytes += deviceByteCount;
+                    }
                 }
                 else
                 {
-                    std::vector<char> silence(byteCount);
-
-                    wav.write(
-                        silence.data(),
-                        silence.size()
-                    );
+                    // Silent buffer - write zeros matching output sample size.
+                    const uint32_t silenceBytes = m_channels * (m_bitsPerSample / 8) * numFrames;
+                    std::vector<char> silence(silenceBytes);
+                    wav.write(silence.data(), silence.size());
+                    totalDataBytes += static_cast<uint32_t>(silence.size());
                 }
 
-                totalDataBytes += byteCount;
-
+                // Update sample count (frame count)
                 m_totalSamples += numFrames;
 
-                captureClient->ReleaseBuffer(
-                    numFrames
-                );
+                captureClient->ReleaseBuffer(numFrames);
 
                 hr = captureClient->GetNextPacketSize(
                     &packetLength
