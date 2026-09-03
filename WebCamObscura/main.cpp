@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <d3d11.h>
+#include <CommCtrl.h>
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -10,6 +11,11 @@
 #include "FFmpegMergeClass.h"
 #include "resource.h"
 
+#pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
+#pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "d3d11.lib")
 
 // RAII guard to ensure every PushStyleColor is popped even on early exits
@@ -104,8 +110,13 @@ int WINAPI WinMain(
 )
 {
 	// --------------------------------------------------------
-	// Register window class
+	// Initialize Visual Styles and Register window class
 	// --------------------------------------------------------
+
+	INITCOMMONCONTROLSEX icex;
+	icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+	icex.dwICC = ICC_STANDARD_CLASSES; // Enables standard buttons, checkboxes, etc.
+	InitCommonControlsEx(&icex);
 
 	WNDCLASSEXW wc =
 	{
