@@ -25,6 +25,9 @@ public:
 
 	void startRecording(const std::string& filename);
 	void stopRecording();
+    // Request stop without blocking so main can coordinate stop of both
+    // audio and video as close to simultaneous as possible.
+    void RequestStopRecording();
 	std::string getVideoStatus() const;
 
 private:

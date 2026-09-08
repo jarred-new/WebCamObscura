@@ -192,6 +192,11 @@ void OpenCVCam::stopRecording()
     if (recordingWorker.joinable()) recordingWorker.join();
 }
 
+void OpenCVCam::RequestStopRecording()
+{
+    isRecording = false;
+}
+
 std::string OpenCVCam::getVideoStatus() const
 {
     std::lock_guard<std::mutex> lk(statusMutex);

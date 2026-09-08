@@ -18,12 +18,15 @@ public:
 
     bool Start(int micDeviceId, const std::string& filename);
     void Stop();
+    // Request a stop without blocking; useful for coordinating simultaneous stop
+    void RequestStop();
 
     bool IsRecording() const;
     double GetRecordingTime() const;
 
 private:
     void RecordingThread(int micDeviceId, std::string filename);
+
 
     bool WriteWavHeader(std::ofstream& file);
     void FinalizeWav(std::ofstream& file, uint32_t dataSize);

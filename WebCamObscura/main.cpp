@@ -573,8 +573,10 @@ int WINAPI WinMain(
 					std::string tempVid(temp + "\\temp.avi");
 
 					try {
-						cam.startRecording(tempVid);
+						// Start audio first and then start camera recording
+						// to reduce startup skew between streams.
 						recorder.Start(g_selectedMicrophoneIndex, tempAud);
+						cam.startRecording(tempVid);
 						recordingActive = true;
 					}
 					catch (const std::exception& e) {
@@ -604,8 +606,15 @@ int WINAPI WinMain(
 			{
 				if (recordingActive)
 				{
+					// Request stop for both audio and video as close to
+					// simultaneous as possible, then join both threads.
+					cam.RequestStopRecording();
+					recorder.RequestStop();
+
+					// Now wait for both to finish cleanly.
 					cam.stopRecording();
 					recorder.Stop();
+
 					recordingActive = false;
 
 					std::string temp(

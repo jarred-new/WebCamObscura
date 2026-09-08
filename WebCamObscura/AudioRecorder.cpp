@@ -88,6 +88,11 @@ void AudioRecorder::Stop()
         m_thread.join();
 }
 
+void AudioRecorder::RequestStop()
+{
+    m_recording = false;
+}
+
 bool AudioRecorder::IsRecording() const
 {
     return m_recording.load();
