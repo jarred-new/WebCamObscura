@@ -1,6 +1,8 @@
 #include "FFmpegMergeClass.h"
 
 #include <vector>
+#include <windows.h>
+#include <string>
 
 FFmpegMergeClass::FFmpegMergeClass()
 {
@@ -19,6 +21,11 @@ bool FFmpegMergeClass::MergeAudioVideo(
 )
 {
     const std::wstring ffmpegPath = GetFFmpegPath();
+    // Verify ffmpeg binary exists before launching
+    if (ffmpegPath.empty() || GetFileAttributesW(ffmpegPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        // ffmpeg not found in application folder
+        return false;
+    }
     const std::wstring videoPath(videoFile.begin(), videoFile.end());
     const std::wstring audioPath(audioFile.begin(), audioFile.end());
     const std::wstring outputPath(outputFile.begin(), outputFile.end());

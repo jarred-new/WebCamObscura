@@ -507,7 +507,8 @@ int WINAPI WinMain(
 		ImGui::Separator();
 
 		ImGui::TextDisabled(
-			"Created by: Jarred | Please put a star on my GitHub Repo!"
+			"Created by: Jarred | Please put a star on my GitHub Repo! | v%d.%d.%d",
+			1, 0, 0
 		);
 
 		ImGui::End();
